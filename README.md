@@ -1,3 +1,10 @@
+> **Two apps live in this repository**
+>
+> | App | Where | Stack | Deploying |
+> | --- | --- | --- | --- |
+> | MiraKilousE Beats (this README) | `server/` + `client/` | Express + Vite/React (npm workspaces) | Needs a Node host (Render, Railway, Fly…) — `npm run dev` locally |
+> | **12 — Beat & Video Store** | `12-beats/` | Next.js 16 + Postgres | Vercel: set **Root Directory** to `12-beats`, framework is detected as Next.js. See `12-beats/README.md` |
+
 # 🎧 MiraKilousE Beats — Type Beats Marketplace
 
 A full-stack marketplace (inspired by **beatz.com** and **BeatStars**) where a music

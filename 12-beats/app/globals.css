@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #0b0b12;
+  --color-panel: #14141f;
+  --color-panel-soft: #1c1c2b;
+  --color-line: #22223a;
+  --color-line-strong: #33334d;
+  --color-body: #f2f2f7;
+  --color-muted: #9a9ab0;
+  --color-accent: #ff5d8f;
+  --color-accent-2: #7c5cff;
+  --color-sky: #39c5ff;
+  --color-ok: #36d399;
+  --color-warn: #f5b546;
+  --color-bad: #ff6b6b;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  --radius-card: 14px;
+
+  --animate-shimmer: shimmer 6s linear infinite;
+  --animate-pulse-ring: pulseRing 2.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: 300% 0;
+  }
+}
+
+@keyframes pulseRing {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 93, 143, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 14px rgba(255, 93, 143, 0);
+  }
+}
+
+@keyframes rise {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+html,
+body {
+  margin: 0;
+}
+
+body {
+  background-color: var(--color-ink);
+  color: var(--color-body);
+  font-family: var(--font-sans);
+  line-height: 1.55;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+main {
+  flex: 1;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Staged entrance used on the hero and page headings: --d sets the delay. */
+.rise {
+  opacity: 0;
+  transform: translateY(24px);
+  animation: rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+  animation-delay: var(--d, 0ms);
+}
+
+.shimmer-text {
+  background-image: linear-gradient(90deg, var(--color-accent), var(--color-accent-2), var(--color-sky), var(--color-accent));
+  background-size: 300% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: var(--animate-shimmer);
+}
+
+/* The hero is a stack of radial glows over the page background. */
+.hero-surface {
+  background-image: radial-gradient(1200px 600px at 20% -10%, #2a1748 0%, transparent 60%),
+    radial-gradient(900px 500px at 110% 110%, #3a0f2a 0%, transparent 60%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .rise {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Slim scrollbars inside dark panels. */
+.overflow-x-auto::-webkit-scrollbar,
+.overflow-y-auto::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+.overflow-x-auto::-webkit-scrollbar-thumb,
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: var(--color-line-strong);
+  border-radius: 999px;
+}
+
+input,
+textarea,
+select {
+  color-scheme: dark;
+}

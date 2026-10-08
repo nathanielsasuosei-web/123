@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" width="1200" height="1200" role="img" aria-label="Cover art for Kpanlogo Drums">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#180a03"/>
+      <stop offset="100%" stop-color="#0b0b12"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ff8f4d"/>
+      <stop offset="100%" stop-color="#ffd166"/>
+    </linearGradient>
+    <linearGradient id="bar" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#ffd166" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#ff8f4d"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="1200" fill="url(#bg)"/>
+  <g opacity="0.9"><circle cx="600" cy="430" r="150" fill="none" stroke="#ff8f4d" stroke-width="2" opacity="0.35"/><circle cx="600" cy="430" r="270" fill="none" stroke="#ff8f4d" stroke-width="2" opacity="0.26"/><circle cx="600" cy="430" r="390" fill="none" stroke="#ff8f4d" stroke-width="2" opacity="0.17"/></g>
+  <g transform="translate(0,120)"><rect x="90" y="263" width="26" height="377" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="132" y="403" width="26" height="237" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="174" y="348" width="26" height="292" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="216" y="512" width="26" height="128" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="258" y="392" width="26" height="248" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="300" y="365" width="26" height="275" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="342" y="326" width="26" height="314" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="384" y="448" width="26" height="192" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="426" y="283" width="26" height="357" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="468" y="333" width="26" height="307" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="510" y="302" width="26" height="338" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="552" y="397" width="26" height="243" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="594" y="234" width="26" height="406" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="636" y="443" width="26" height="197" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="678" y="521" width="26" height="119" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="720" y="425" width="26" height="215" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="762" y="395" width="26" height="245" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="804" y="527" width="26" height="113" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="846" y="497" width="26" height="143" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="888" y="214" width="26" height="426" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="930" y="356" width="26" height="284" rx="13" fill="url(#bar)" opacity="0.85"/><rect x="972" y="476" width="26" height="164" rx="13" fill="url(#bar)" opacity="0.85"/></g>
+  <rect x="90" y="760" width="1020" height="2" fill="#ff8f4d" opacity="0.25"/>
+  <text x="90" y="900" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="96" font-weight="800" fill="#f2f2f7" letter-spacing="-2">Kpanlogo Drums</text>
+  <text x="90" y="972" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="42" font-weight="600" fill="#ff8f4d">AFRO PERCUSSION · 96 BPM</text>
+  <g transform="translate(90,1030)">
+    <rect width="112" height="112" rx="30" fill="url(#mark)"/>
+    <text x="56" y="76" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="58" font-weight="800" fill="#ffffff">12</text>
+  </g>
+</svg>
