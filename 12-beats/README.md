@@ -1,7 +1,9 @@
 # 12 — Beat & Video Store
 
 A storefront for a music producer, built with **Next.js 16** (App Router, React 19, Tailwind v4) and
-**Postgres** — the same store as the Django build, but deployable on Vercel with no build tweaks.
+**Postgres** — the same store as the Django build, in a single Next.js app that Vercel builds with
+no custom build steps. It lives in **`12-beats/`**; see the repository root README for the other app
+in this repository.
 
 - **Producer admin** (`/admin`): upload beats (audio, cover, price, BPM, key, genre), add videos
   (YouTube/Vimeo links or uploaded files), see every order, and read the outbox of emails the app sent.
@@ -14,7 +16,11 @@ A storefront for a music producer, built with **Next.js 16** (App Router, React 
 
 ## Run it locally
 
+This app lives in the `12-beats/` directory of the repository (the repository root belongs to the
+MiraKilousE Beats monorepo — `server/` + `client/`). Everything in this README runs from here:
+
 ```bash
+cd 12-beats
 npm install
 npm run dev            # http://localhost:3000
 ```
@@ -40,9 +46,11 @@ DATABASE_URL="postgres://…" npm run producer:create -- you@example.com nathan 
 
 ## Deploy to Vercel
 
-1. **Import the repository** at [vercel.com/new](https://vercel.com/new). Vercel detects Next.js
-   automatically (this repo has `next` in `dependencies` and no extra build settings) — leave the
-   framework preset, build command and output directory untouched.
+1. **Import the repository** at [vercel.com/new](https://vercel.com/new), then set the project's
+   **Root Directory** to **`12-beats`** (Project → Settings → Build and Deployment → Root Directory).
+   That matters: the repository root holds the MiraKilousE Beats monorepo with its own
+   `package.json`, so a project pointed at the root will not build this app. Once the root directory
+   is `12-beats`, Vercel detects Next.js automatically and needs no other build settings.
 2. **Add a Postgres database**: Project → Storage → *Create Database* → Neon (or Supabase, or any
    Postgres). Vercel injects `DATABASE_URL` for you. The schema is created on first use —
    `npm run db:init` is only a pre-flight check.
