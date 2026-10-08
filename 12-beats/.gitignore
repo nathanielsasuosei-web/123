@@ -21,3 +21,7 @@ demo-assets/generated/
 
 # OS noise
 .DS_Store
+
+# Python bytecode (demo media generator)
+__pycache__/
+*.pyc
