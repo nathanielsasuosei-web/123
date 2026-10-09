@@ -1,6 +1,5 @@
-import { api, esc, money, dateTime, toast } from './api.js';
-import { state } from './app.js';
-import { embedUrl } from './videos.js';
+import { api, upload, esc, money, dateTime, toast } from './api.js';
+import { state } from './core.js';
 
 const NAV = [
   ['/admin', 'Overview'],
@@ -12,41 +11,14 @@ const NAV = [
   ['/admin/settings', 'Settings'],
 ];
 
-/** Upload with a live progress bar (XMLHttpRequest exposes upload progress; fetch does not). */
-function sendForm(method, url, formData, onProgress) {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open(method, url);
-    xhr.withCredentials = true;
-    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
-    xhr.onload = () => {
-      let data = {};
-      try {
-        data = JSON.parse(xhr.responseText);
-      } catch {
-        /* not JSON */
-      }
-      if (xhr.status >= 200 && xhr.status < 300) resolve(data);
-      else reject(new Error(data.error || `Upload failed (${xhr.status})`));
-    };
-    xhr.onerror = () => reject(new Error('Network error during upload. Check your connection and try again.'));
-    xhr.send(formData);
-  });
-}
-
 export async function renderAdmin(el, params, match) {
-  if (!state.me) {
-    el.innerHTML = `<section class="container section narrow center"><h1>Producer login</h1>
+  if (!state.me || state.me.role !== 'admin') {
+    el.innerHTML = `<section class="container section narrow center">
+      <h1>Producer login</h1>
       <p class="muted">Log in with the producer account to manage the store.</p>
       <a class="btn btn-primary" href="#/login?next=${encodeURIComponent('/admin')}">Log in</a></section>`;
     return;
   }
-  if (state.me.role !== 'admin') {
-    el.innerHTML = `<section class="container section narrow center"><h1>Producer access only</h1>
-      <p class="muted">This area is for the producer account.</p><a class="btn btn-outline" href="#/">Back to the store</a></section>`;
-    return;
-  }
-
   const sub = (match[1] || '').replace(/\/$/, '');
   const section = sub.split('/')[1] || '';
   const current = section ? `/admin/${section}` : '/admin';
@@ -60,20 +32,25 @@ export async function renderAdmin(el, params, match) {
   const body = el.querySelector('#adminBody');
 
   let m;
-  if (sub === '' || sub === '/') return overview(body);
+  if (sub === '') return overview(body);
   if (sub === '/beats') return beatsList(body);
   if (sub === '/beats/new') return beatForm(body, null);
   if ((m = sub.match(/^\/beats\/(\d+)$/))) return beatForm(body, m[1]);
-  if (sub === '/videos') return videosPage(body);
-  if (sub === '/orders') return ordersPage(body, params.get('status') || 'all');
-  if (sub === '/messages') return messagesPage(body, null);
-  if ((m = sub.match(/^\/messages\/(\d+)$/))) return messagesPage(body, m[1]);
-  if (sub === '/outbox') return outboxPage(body);
-  if (sub === '/settings') return settingsPage(body);
+  if (sub === '/videos') return videos(body);
+  if (sub === '/orders') return orders(body, params.get('status') || 'all');
+  if (sub === '/messages') return messages(body, null);
+  if ((m = sub.match(/^\/messages\/(\d+)$/))) return messages(body, m[1]);
+  if (sub === '/outbox') return outbox(body);
+  if (sub === '/settings') return settings(body);
   body.innerHTML = '<p class="empty">Page not found.</p>';
 }
 
-// ── Overview ────────────────────────────────────────────────────────────────────
+const progressBar = (bar, p) => {
+  bar.querySelector('.bar').style.width = `${Math.round(p * 100)}%`;
+  bar.querySelector('span').textContent = `Uploading ${Math.round(p * 100)}%`;
+};
+
+// ── Overview ─────────────────────────────────────────────────────────────────────
 async function overview(body) {
   const s = await api('/api/admin/stats');
   body.innerHTML = `
@@ -96,7 +73,7 @@ async function overview(body) {
     </div>`;
 }
 
-// ── Beats ─────────────────────────────────────────────────────────────────────────
+// ── Beats ───────────────────────────────────────────────────────────────────────
 async function beatsList(body) {
   const { items } = await api('/api/admin/beats');
   body.innerHTML = `
@@ -117,12 +94,12 @@ async function beatsList(body) {
             <a class="btn btn-sm btn-outline" href="#/admin/beats/${b.id}">Edit</a>
             <button class="btn btn-sm btn-danger" data-del="${b.id}" data-title="${esc(b.title)}">Delete</button>
           </td>
-        </tr>`).join('')}
-      </tbody></table></div>` : `<div class="empty-box"><p>No beats yet.</p><a class="btn btn-primary" href="#/admin/beats/new">Upload your first beat</a></div>`}`;
+        </tr>`).join('')}</tbody></table></div>`
+      : '<div class="empty-box"><p>No beats yet.</p><a class="btn btn-primary" href="#/admin/beats/new">Upload your first beat</a></div>'}`;
 
   body.querySelectorAll('[data-del]').forEach((btn) => {
     btn.onclick = async () => {
-      if (!confirm(`Delete "${btn.dataset.title}"? Beats with sales are hidden instead of deleted.`)) return;
+      if (!confirm(`Delete "${btn.dataset.title}"? Beats with sales are hidden instead.`)) return;
       try {
         const res = await api(`/api/admin/beats/${btn.dataset.del}`, { method: 'DELETE' });
         toast(res.archived ? res.message : 'Beat deleted.');
@@ -144,16 +121,18 @@ async function beatForm(body, id) {
     }
   }
   const v = beat || { title: '', genre: '', mood: '', bpm: '', key: '', tags: [], description: '', prices: { mp3: 3000, wav: 5000, exclusive: 25000 }, published: true };
+  const tags = Array.isArray(v.tags) ? v.tags.join(', ') : v.tags;
+  const fileNote = (exists) => (beat ? `<small class="muted">${exists ? 'Keep empty to leave it unchanged' : ''}</small>` : '');
   body.innerHTML = `
     <div class="page-head"><h1>${beat ? 'Edit beat' : 'Upload a beat'}</h1><a class="btn btn-outline" href="#/admin/beats">← Back to beats</a></div>
-    <form id="beatForm" class="admin-form card pad" enctype="multipart/form-data">
+    <form id="beatForm" class="admin-form card pad">
       <div class="grid-2">
         <label>Title *<input name="title" required maxlength="120" value="${esc(v.title)}" /></label>
         <label>Genre<input name="genre" list="genres" maxlength="60" value="${esc(v.genre)}" placeholder="Afrobeat, Drill, R&amp;B…" /></label>
         <label>Mood<input name="mood" maxlength="60" value="${esc(v.mood)}" placeholder="Dark, Chill, Energetic" /></label>
         <label>BPM<input name="bpm" type="number" min="30" max="300" value="${esc(v.bpm || '')}" /></label>
         <label>Key<input name="key" maxlength="30" value="${esc(v.key)}" placeholder="C minor" /></label>
-        <label>Tags (comma separated)<input name="tags" maxlength="300" value="${esc(Array.isArray(v.tags) ? v.tags.join(', ') : v.tags)}" /></label>
+        <label>Tags (comma separated)<input name="tags" maxlength="300" value="${esc(tags)}" /></label>
       </div>
       <datalist id="genres"><option>Afrobeat</option><option>Amapiano</option><option>Highlife</option><option>Hip hop</option><option>Drill</option><option>R&amp;B</option><option>Trap</option><option>Dancehall</option></datalist>
       <label>Description<textarea name="description" rows="3" maxlength="2000">${esc(v.description)}</textarea></label>
@@ -167,11 +146,14 @@ async function beatForm(body, id) {
 
       <h3 class="h4">Files</h3>
       <div class="grid-3">
-        <label class="file-field">Full beat (WAV or MP3)${beat ? `<small class="muted">Current: ${esc(beat.audioName)} · keep empty to leave it</small>` : '<small class="muted">Required. Sent to buyers only.</small>'}
+        <label class="file-field">Full beat (WAV or MP3)
+          ${beat ? `<small class="muted">Current: ${esc(beat.audioName)}. Keep empty to leave it.</small>` : '<small class="muted">Required. Sent only to buyers.</small>'}
           <input name="audio" type="file" accept=".mp3,.wav,.m4a,.aac,.ogg,.flac" ${beat ? '' : 'required'} /></label>
-        <label class="file-field">Preview (short MP3 recommended)${beat ? '<small class="muted">Keep empty to leave it</small>' : '<small class="muted">Required. Plays on the site.</small>'}
+        <label class="file-field">Preview (short MP3 recommended)
+          ${beat ? '<small class="muted">Keep empty to leave it.</small>' : '<small class="muted">Required. Plays on the site.</small>'}
           <input name="preview" type="file" accept=".mp3,.wav,.m4a,.aac,.ogg,.flac" ${beat ? '' : 'required'} /></label>
-        <label class="file-field">Cover art (JPG, PNG or WebP)${beat?.coverUrl ? '<small class="muted">Keep empty to leave it</small>' : ''}
+        <label class="file-field">Cover art (JPG, PNG or WebP)
+          ${fileNote(beat?.coverUrl)}
           <input name="cover" type="file" accept=".jpg,.jpeg,.png,.webp,.gif" /></label>
       </div>
       <label class="check"><input type="checkbox" name="published" ${v.published ? 'checked' : ''} /> Show this beat in the store</label>
@@ -186,7 +168,6 @@ async function beatForm(body, id) {
     e.preventDefault();
     const fd = new FormData(form);
     fd.set('published', form.published.checked ? 'true' : 'false');
-    // Empty file inputs should not be sent on edit.
     for (const name of ['audio', 'preview', 'cover']) {
       const f = fd.get(name);
       if (!f || !f.name) fd.delete(name);
@@ -196,10 +177,7 @@ async function beatForm(body, id) {
     bar.classList.remove('hidden');
     btn.disabled = true;
     try {
-      await sendForm(beat ? 'PUT' : 'POST', beat ? `/api/admin/beats/${beat.id}` : '/api/admin/beats', fd, (p) => {
-        bar.querySelector('.bar').style.width = `${Math.round(p * 100)}%`;
-        bar.querySelector('span').textContent = `Uploading ${Math.round(p * 100)}%`;
-      });
+      await upload(beat ? 'PUT' : 'POST', beat ? `/api/admin/beats/${beat.id}` : '/api/admin/beats', fd, (p) => progressBar(bar, p));
       toast(beat ? 'Beat saved.' : 'Beat published!');
       location.hash = '#/admin/beats';
     } catch (err) {
@@ -210,22 +188,17 @@ async function beatForm(body, id) {
   };
 }
 
-// ── Videos ──────────────────────────────────────────────────────────────────────
-async function videosPage(body) {
-  const [{ items }, beats] = await Promise.all([api('/api/admin/videos'), api('/api/admin/beats')]);
+// ── Videos ─────────────────────────────────────────────────────────────────────
+async function videos(body) {
+  const { items } = await api('/api/admin/videos');
   body.innerHTML = `
     <h1>Videos</h1>
-    <form id="videoForm" class="admin-form card pad" enctype="multipart/form-data">
+    <form id="videoForm" class="admin-form card pad">
       <h3 class="h4">Add a video</h3>
-      <div class="grid-2">
-        <label>Title *<input name="title" required maxlength="120" /></label>
-        <label>Linked beat (optional)
-          <select name="beat_id"><option value="">None</option>${beats.items.map((b) => `<option value="${b.id}">${esc(b.title)}</option>`).join('')}</select>
-        </label>
-      </div>
+      <label>Title *<input name="title" required maxlength="120" /></label>
       <label>Description<textarea name="description" rows="2" maxlength="2000"></textarea></label>
       <div class="grid-3">
-        <label class="file-field">Video file (MP4, WebM, MOV)<input name="video" type="file" accept=".mp4,.webm,.mov,.m4v" /><small class="muted">Or paste a link below</small></label>
+        <label class="file-field">Video file (MP4, WebM, MOV)<input name="video" type="file" accept=".mp4,.webm,.mov,.m4v" /><small class="muted">Or paste a link instead</small></label>
         <label>…or YouTube / Vimeo link<input name="youtube_url" type="url" placeholder="https://youtube.com/watch?v=…" /></label>
         <label class="file-field">Thumbnail (optional)<input name="cover" type="file" accept=".jpg,.jpeg,.png,.webp" /></label>
       </div>
@@ -235,7 +208,7 @@ async function videosPage(body) {
       <button class="btn btn-primary" type="submit">Add video</button>
     </form>
 
-    <h2 class="h3 mt">Published and drafts</h2>
+    <h2 class="h3 mt">Videos</h2>
     ${items.length ? `<div class="table-wrap"><table class="table">
       <thead><tr><th></th><th>Title</th><th>Source</th><th>Views</th><th>Status</th><th></th></tr></thead>
       <tbody>${items.map((v) => `<tr>
@@ -261,40 +234,37 @@ async function videosPage(body) {
     const bar = body.querySelector('#upProgress');
     bar.classList.remove('hidden');
     try {
-      await sendForm('POST', '/api/admin/videos', fd, (p) => {
-        bar.querySelector('.bar').style.width = `${Math.round(p * 100)}%`;
-        bar.querySelector('span').textContent = `Uploading ${Math.round(p * 100)}%`;
-      });
+      await upload('POST', '/api/admin/videos', fd, (p) => progressBar(bar, p));
       toast('Video added.');
-      videosPage(body);
+      videos(body);
     } catch (err) {
       form.querySelector('#formError').textContent = err.message;
       bar.classList.add('hidden');
     }
   };
-
   body.querySelectorAll('[data-toggle]').forEach((btn) => {
     btn.onclick = async () => {
       await api(`/api/admin/videos/${btn.dataset.toggle}`, { method: 'PATCH', body: { published: btn.dataset.pub === '1' } });
-      videosPage(body);
+      videos(body);
     };
   });
   body.querySelectorAll('[data-del]').forEach((btn) => {
     btn.onclick = async () => {
       if (!confirm('Delete this video?')) return;
       await api(`/api/admin/videos/${btn.dataset.del}`, { method: 'DELETE' });
-      videosPage(body);
+      videos(body);
     };
   });
 }
 
 // ── Orders ──────────────────────────────────────────────────────────────────────
-async function ordersPage(body, status) {
+async function orders(body, status) {
   const { items } = await api(`/api/admin/orders?status=${status === 'all' ? '' : status}`);
-  const tabs = ['pending', 'paid', 'all'];
   body.innerHTML = `
     <h1>Orders</h1>
-    <div class="tabs">${tabs.map((t) => `<a class="tab ${t === status ? 'active' : ''}" href="#/admin/orders?status=${t}">${t === 'pending' ? 'Awaiting payment' : t === 'paid' ? 'Paid' : 'All'}</a>`).join('')}</div>
+    <div class="tabs">
+      ${[['pending', 'Awaiting payment'], ['paid', 'Paid'], ['all', 'All']].map(([k, label]) => `<a class="tab ${k === status ? 'active' : ''}" href="#/admin/orders?status=${k}">${label}</a>`).join('')}
+    </div>
     ${items.length ? `<div class="table-wrap"><table class="table">
       <thead><tr><th>Reference</th><th>Buyer</th><th>Beat</th><th>Licence</th><th>Amount</th><th>Method</th><th>Status</th><th></th></tr></thead>
       <tbody>${items.map((o) => `<tr>
@@ -315,7 +285,7 @@ async function ordersPage(body, status) {
       try {
         await api(`/api/admin/orders/${btn.dataset.confirm}/confirm`, { method: 'POST' });
         toast('Order confirmed. The buyer has been emailed.');
-        ordersPage(body, status);
+        orders(body, status);
       } catch (err) {
         toast(err.message, 'error');
         btn.disabled = false;
@@ -324,38 +294,46 @@ async function ordersPage(body, status) {
   });
 }
 
-// ── Messages ──────────────────────────────────────────────────────────────────────
-async function messagesPage(body, userId) {
+// ── Messages ───────────────────────────────────────────────────────────────────
+async function messages(body, userId) {
   const { items: threads } = await api('/api/admin/threads');
   const list = threads.length
     ? threads.map((t) => `
-        <a class="thread ${String(t.id) === String(userId) ? 'active' : ''}" href="#/admin/messages/${t.id}">
-          <div class="thread-top"><strong>${esc(t.name)}</strong>${t.unread ? `<span class="badge">${t.unread}</span>` : ''}</div>
-          <div class="muted small">${esc(t.last_body || '').slice(0, 60)}</div>
-          <div class="muted small">${dateTime(t.last_at)}</div>
-        </a>`).join('')
+      <a class="thread ${String(t.id) === String(userId) ? 'active' : ''}" href="#/admin/messages/${t.id}">
+        <div class="thread-top"><strong>${esc(t.name)}</strong>${t.unread ? `<span class="badge">${t.unread}</span>` : ''}</div>
+        <div class="muted small">${esc((t.last_body || '').slice(0, 60))}</div>
+        <div class="muted small">${dateTime(t.last_at)}</div>
+      </a>`).join('')
     : '<p class="empty">No conversations yet.</p>';
 
   body.innerHTML = `
     <h1>Messages</h1>
     <div class="inbox">
       <div class="thread-list">${list}</div>
-      <div class="thread-view" id="threadView">${userId ? '<div class="loader"></div>' : '<p class="empty">Pick a conversation to read and reply.</p>'}</div>
+      <div class="thread-view" id="threadView">
+        ${userId ? '<div class="loader"></div>' : '<p class="empty">Pick a conversation to read and reply.</p>'}
+      </div>
     </div>`;
-
   if (!userId) return;
-  const { user, items } = await api(`/api/admin/messages/${userId}`);
+
   const view = body.querySelector('#threadView');
-  const draw = (msgs) => {
+  let data;
+  try {
+    data = await api(`/api/admin/messages/${userId}`);
+  } catch (err) {
+    view.innerHTML = `<p class="empty">${esc(err.message)}</p>`;
+    return;
+  }
+  const draw = (items) => {
     view.innerHTML = `
-      <div class="thread-head"><strong>${esc(user.name)}</strong> <span class="muted small">${esc(user.email)}</span></div>
-      <div class="chat-log" id="chatLog">${msgs.map((m) => `
+      <div class="thread-head"><strong>${esc(data.user.name)}</strong> <span class="muted small">${esc(data.user.email)}</span></div>
+      <div class="chat-log" id="chatLog">${items.map((m) => `
         <div class="bubble ${m.sender === 'producer' ? 'mine' : 'theirs'}">
           <div class="bubble-text">${esc(m.body).replace(/\n/g, '<br>')}</div>
-          <div class="bubble-time">${m.sender === 'producer' ? 'You' : esc(user.name)} · ${dateTime(m.created_at)}</div>
+          <div class="bubble-time">${m.sender === 'producer' ? 'You' : esc(data.user.name)} · ${dateTime(m.created_at)}</div>
         </div>`).join('')}</div>
       <form class="chat-form" id="replyForm">
-        <textarea name="body" rows="2" maxlength="2000" placeholder="Reply to ${esc(user.name)}… (they get an email)" required></textarea>
+        <textarea name="body" rows="2" maxlength="2000" placeholder="Reply to ${esc(data.user.name)}. They get an email." required></textarea>
         <button class="btn btn-primary" type="submit">Send reply</button>
       </form>`;
     const log = view.querySelector('#chatLog');
@@ -372,11 +350,11 @@ async function messagesPage(body, userId) {
       }
     };
   };
-  draw(items);
+  draw(data.items);
 }
 
-// ── Mailbox (outbox) ──────────────────────────────────────────────────────────────
-async function outboxPage(body) {
+// ── Mailbox ───────────────────────────────────────────────────────────────────
+async function outbox(body) {
   const { items } = await api('/api/admin/outbox');
   body.innerHTML = `
     <h1>Mailbox</h1>
@@ -402,8 +380,8 @@ async function outboxPage(body) {
   });
 }
 
-// ── Settings ──────────────────────────────────────────────────────────────────────
-async function settingsPage(body) {
+// ── Settings ────────────────────────────────────────────────────────────────────
+async function settings(body) {
   const s = await api('/api/admin/settings');
   const row = (label, value) => `<li><span>${esc(label)}</span><strong>${esc(value || 'Not set')}</strong></li>`;
   body.innerHTML = `
@@ -412,10 +390,10 @@ async function settingsPage(body) {
       <div class="card pad">
         <h3 class="h4">Payments</h3>
         <p><span class="pill ${s.paymentMode === 'paystack' ? 'pill-ok' : 'pill-test'}">${s.paymentMode === 'paystack' ? 'Live (Paystack)' : 'Test mode'}</span></p>
-        <p class="muted small">Mobile Money and bank transfer in ${esc(s.currency)}. ${s.paymentMode === 'paystack'
-          ? 'Paystack takes payment; the webhook below confirms every order.'
-          : 'Add PAYSTACK_SECRET_KEY to take real payments. In test mode, buyers confirm the payment themselves.'}</p>
-        <p class="small">Webhook URL for the Paystack dashboard:<br/><code class="mono">${esc(s.webhookUrl)}</code></p>
+        <p class="muted small">${s.paymentMode === 'paystack'
+          ? 'Paystack takes Mobile Money and bank payments. The webhook below confirms each order.'
+          : 'Add PAYSTACK_SECRET_KEY to take real payments. In test mode buyers confirm the payment themselves.'}</p>
+        <p class="small">Webhook URL for the Paystack dashboard:<br /><code class="mono">${esc(s.webhookUrl)}</code></p>
         <ul class="details">
           ${row('MoMo number', s.paymentDetails.momo?.number)}
           ${row('MoMo name', s.paymentDetails.momo?.name)}
@@ -426,15 +404,15 @@ async function settingsPage(body) {
       </div>
       <div class="card pad">
         <h3 class="h4">Email</h3>
-        <p><span class="pill ${s.emailMode === 'smtp' ? 'pill-ok' : 'pill-test'}">${s.emailMode === 'smtp' ? 'Sending via SMTP' : 'Outbox only'}</span></p>
+        <p><span class="pill ${s.emailMode === 'smtp' ? 'pill-ok' : 'pill-test'}">${s.emailMode === 'smtp' ? 'Sending via SMTP' : 'Mailbox only'}</span></p>
         <p class="muted small">${s.emailMode === 'smtp'
-          ? 'Emails are sent to buyers and artists and are also kept in the Mailbox.'
-          : 'No SMTP server is configured, so emails are only kept in the Mailbox. Set SMTP_HOST to send them.'}</p>
+          ? 'Emails go to buyers and artists and are also kept in the Mailbox.'
+          : 'No SMTP server is set, so emails are only kept in the Mailbox. Set SMTP_HOST to send them.'}</p>
         <ul class="details">
           ${row('Notifications to', s.adminEmail)}
           ${row('Site URL', s.siteUrl)}
         </ul>
       </div>
     </div>
-    <p class="muted small mt">Settings come from the server's environment variables (see .env.example). Change them there and restart the server.</p>`;
+    <p class="muted small mt">Settings come from environment variables (see .env.example). Change them there and restart the server.</p>`;
 }

@@ -7,15 +7,13 @@ const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 let secret = config.authSecret;
 if (!secret) {
-  // Random per-process secret: sessions reset on restart. Set AUTH_SECRET to keep them.
   secret = crypto.randomBytes(32).toString('hex');
-  console.warn('[auth] AUTH_SECRET is not set; sessions will reset when the server restarts.');
+  console.warn('[auth] AUTH_SECRET is not set; logins will reset when the server restarts.');
 }
 
 export function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return `scrypt$${salt}$${hash}`;
+  return `scrypt$${salt}$${crypto.scryptSync(password, salt, 64).toString('hex')}`;
 }
 
 export function verifyPassword(password, stored) {
@@ -26,15 +24,12 @@ export function verifyPassword(password, stored) {
   return expected.length === candidate.length && crypto.timingSafeEqual(candidate, expected);
 }
 
-function sign(payload) {
-  return crypto.createHmac('sha256', secret).update(payload).digest('base64url');
-}
+const sign = (payload) => crypto.createHmac('sha256', secret).update(payload).digest('base64url');
 
-export function createSession(res, userId) {
+export function setSession(res, userId) {
   const exp = Date.now() + MAX_AGE_MS;
   const payload = `${userId}.${exp}`;
-  const token = `${payload}.${sign(payload)}`;
-  res.cookie(COOKIE, token, {
+  res.cookie(COOKIE, `${payload}.${sign(payload)}`, {
     httpOnly: true,
     sameSite: 'lax',
     secure: config.siteUrl.startsWith('https://'),
@@ -47,10 +42,9 @@ export function clearSession(res) {
   res.clearCookie(COOKIE, { path: '/' });
 }
 
-function readUserId(req) {
+function userIdFromCookie(req) {
   const raw = req.cookies?.[COOKIE];
-  if (!raw) return null;
-  const parts = raw.split('.');
+  const parts = raw ? raw.split('.') : [];
   if (parts.length !== 3) return null;
   const [uid, exp, sig] = parts;
   const expected = sign(`${uid}.${exp}`);
@@ -59,9 +53,8 @@ function readUserId(req) {
   return Number(uid);
 }
 
-/** Loads req.user when a valid session cookie is present. Never rejects. */
 export function loadUser(req, _res, next) {
-  const uid = readUserId(req);
+  const uid = userIdFromCookie(req);
   req.user = uid ? q.get('SELECT id, name, email, role FROM users WHERE id = ?', uid) || null : null;
   next();
 }

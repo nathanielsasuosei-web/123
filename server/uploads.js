@@ -2,40 +2,30 @@ import fs from 'node:fs';
 import path from 'node:path';
 import multer from 'multer';
 import { config } from './config.js';
-import { randomToken } from './lib/util.js';
+import { randomToken } from './util.js';
 
-const AUDIO_EXT = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'];
-const IMAGE_EXT = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
-const VIDEO_EXT = ['.mp4', '.webm', '.mov', '.m4v'];
+const AUDIO = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'];
+const IMAGE = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+const VIDEO = ['.mp4', '.webm', '.mov', '.m4v'];
 
-/**
- * Upload folders.
- * - private/audio: full beat files. Never served directly; only sent after a paid order.
- * - public/*: covers, previews and videos, served at /media/*.
- */
-const folders = {
+// audio → private (never served directly). preview, cover, video → public under /media.
+const FOLDERS = {
   audio: path.join(config.dataDir, 'private', 'audio'),
   preview: path.join(config.dataDir, 'public', 'previews'),
   cover: path.join(config.dataDir, 'public', 'covers'),
   video: path.join(config.dataDir, 'public', 'videos'),
 };
-for (const dir of Object.values(folders)) fs.mkdirSync(dir, { recursive: true });
-
-const rules = {
-  audio: AUDIO_EXT,
-  preview: AUDIO_EXT,
-  cover: IMAGE_EXT,
-  video: VIDEO_EXT,
-};
+const RULES = { audio: AUDIO, preview: AUDIO, cover: IMAGE, video: VIDEO };
+for (const dir of Object.values(FOLDERS)) fs.mkdirSync(dir, { recursive: true });
 
 const upload = multer({
   storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, folders[file.fieldname]),
+    destination: (req, file, cb) => cb(null, FOLDERS[file.fieldname]),
     filename: (req, file, cb) => cb(null, randomToken(16) + path.extname(file.originalname).toLowerCase()),
   }),
   limits: { fileSize: 400 * 1024 * 1024, files: 4, fields: 30 },
   fileFilter: (req, file, cb) => {
-    const allowed = rules[file.fieldname];
+    const allowed = RULES[file.fieldname];
     if (!allowed) return cb(new Error(`Unexpected upload field "${file.fieldname}".`));
     if (!allowed.includes(path.extname(file.originalname).toLowerCase())) {
       return cb(new Error(`"${file.originalname}" is not a supported file type for ${file.fieldname}.`));
@@ -44,36 +34,29 @@ const upload = multer({
   },
 });
 
-/** Returns the path stored in the database, relative to its storage root. */
+/** Path as stored in the database, relative to its root (private or public). */
 export function storedPath(file) {
-  const root = file.fieldname === 'audio' ? path.join(config.dataDir, 'private') : path.join(config.dataDir, 'public');
-  return path.relative(root, file.path).split(path.sep).join('/');
+  const root = file.fieldname === 'audio' ? 'private' : 'public';
+  return path.relative(path.join(config.dataDir, root), file.path).split(path.sep).join('/');
 }
 
-export function publicUrl(relPath) {
-  return relPath ? `/media/${relPath}` : null;
-}
+export const mediaUrl = (rel) => (rel ? `/media/${rel}` : null);
 
-/** Deletes uploaded files, used when a request fails after files were stored. */
 export function removeFiles(files = {}) {
-  for (const list of Object.values(files)) {
-    for (const file of list) fs.rm(file.path, { force: true }, () => {});
-  }
+  for (const list of Object.values(files)) for (const f of list) fs.rm(f.path, { force: true }, () => {});
 }
 
-export function removeStored(relPath, { private: isPrivate = false } = {}) {
-  if (!relPath) return;
-  const root = isPrivate ? path.join(config.dataDir, 'private') : path.join(config.dataDir, 'public');
-  fs.rm(path.join(root, relPath), { force: true }, () => {});
+export function removeStored(rel, { isPrivate = false } = {}) {
+  if (rel) fs.rm(path.join(config.dataDir, isPrivate ? 'private' : 'public', rel), { force: true }, () => {});
 }
 
-export const uploadBeatFiles = upload.fields([
+export const uploadBeat = upload.fields([
   { name: 'audio', maxCount: 1 },
   { name: 'preview', maxCount: 1 },
   { name: 'cover', maxCount: 1 },
 ]);
 
-export const uploadVideoFiles = upload.fields([
+export const uploadVideo = upload.fields([
   { name: 'video', maxCount: 1 },
   { name: 'cover', maxCount: 1 },
 ]);

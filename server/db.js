@@ -30,10 +30,9 @@ CREATE TABLE IF NOT EXISTS beats (
   price_wav INTEGER NOT NULL,
   price_exclusive INTEGER NOT NULL,
   cover_path TEXT,
-  preview_path TEXT,
+  preview_path TEXT NOT NULL,
   audio_path TEXT NOT NULL,
   audio_name TEXT NOT NULL,
-  audio_mime TEXT NOT NULL,
   audio_size INTEGER NOT NULL,
   published INTEGER NOT NULL DEFAULT 1,
   plays INTEGER NOT NULL DEFAULT 0,
@@ -46,7 +45,6 @@ CREATE TABLE IF NOT EXISTS videos (
   file_path TEXT,
   cover_path TEXT,
   youtube_url TEXT,
-  beat_id INTEGER REFERENCES beats(id) ON DELETE SET NULL,
   published INTEGER NOT NULL DEFAULT 1,
   views INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -88,7 +86,6 @@ CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id, created_at);
 `);
 
-// Small helpers around prepared statements.
 export const q = {
   all: (sql, ...params) => db.prepare(sql).all(...params),
   get: (sql, ...params) => db.prepare(sql).get(...params),

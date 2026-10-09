@@ -1,102 +1,84 @@
-# Beat Store — a beat & video store for a music producer
+# Beat Store
 
-A website where a producer sells beats and videos:
+A storefront for a music producer. Beats and videos are uploaded from a private
+producer dashboard. Artists create an account, buy a licence with **Mobile Money or
+bank transfer** (GHS), and receive the beat **by email**. Purchase confirmations and
+messages also go by email. Blue theme with an animated hero.
 
-- **Producer (admin)** uploads beats (full file, preview, cover, prices, BPM, key, tags) and videos (file or YouTube/Vimeo link), confirms payments, replies to artists, and reads the mailbox of every email the store sent.
-- **Artists** create an account, preview beats, pick a licence (MP3 lease, WAV lease, exclusive), pay with **Mobile Money** or **bank transfer**, and receive the beat **by email** and in their dashboard.
-- **Messages** between artists and the producer live on the site, and every message also triggers an **email notification**.
-- Animated **blue hero** on the home page, responsive layout, audio previews with a global player.
+## Quick start
 
-Stack: Node.js 22 + Express, SQLite (built-in `node:sqlite`), vanilla JavaScript front end (no build step), Paystack for payments, Nodemailer for SMTP email.
-
-## Run it locally
-
-Requires **Node.js 22.13 or newer**.
+Requires Node.js 22.13 or newer (uses the built-in `node:sqlite`).
 
 ```bash
 npm install
-cp .env.example .env          # optional: edit the admin login and details
-npm run seed                  # creates the producer account and 5 demo beats
-npm start                     # http://localhost:4000
+cp .env.example .env        # then set ADMIN_EMAIL, ADMIN_PASSWORD, AUTH_SECRET
+npm run seed                # creates the producer account and 5 demo beats
+npm start                   # http://localhost:4000
 ```
 
-Then open http://localhost:4000. Log in as the producer (`ADMIN_EMAIL` / `ADMIN_PASSWORD`, default `producer@example.com` / `change-this-password`) and open **Producer** in the menu.
+Log in with `ADMIN_EMAIL` / `ADMIN_PASSWORD` to reach the producer area at `#/admin`.
 
-With no payment keys set, checkout runs in **test mode**: buyers see the Mobile Money number or bank details and confirm the payment themselves. No real money moves. Emails are kept in **Producer → Mailbox** until you configure SMTP.
+## Scripts
 
-### Smoke test
-
-With the server running:
-
-```bash
-npm run smoke
-```
-
-It signs up an artist, buys a beat, pays, downloads, messages the producer, uploads a beat and a video as the producer, and checks that every email was recorded and delivered exactly once.
-
-## Going live
-
-### 1. Payments (Paystack: Mobile Money + bank transfer)
-
-1. Create a Paystack account for Ghana and get your **secret key**.
-2. Set `PAYSTACK_SECRET_KEY` and keep `PAYMENT_CURRENCY=GHS`.
-3. In the Paystack dashboard, set the webhook URL to `https://YOUR-DOMAIN/api/payments/webhook`.
-
-Buyers are sent to Paystack's hosted checkout, which offers Mobile Money and bank transfer. Each payment is verified with Paystack before the beat is delivered, and the webhook is signature-checked. Delivery happens once, even if the webhook and the buyer's return page both fire.
-
-If a bank transfer arrives outside Paystack, use **Producer → Orders → Mark paid** to confirm it manually. That also emails the beat.
-
-### 2. Email
-
-Set the `SMTP_*` variables (for example from your domain's mail provider or Resend, Mailgun, or Gmail SMTP). Without SMTP, emails are only saved in the producer's mailbox.
-
-Emails sent: welcome, purchase receipt with download link (the file is attached when it is under `EMAIL_ATTACH_MAX_MB`), new-sale notice to the producer, new-message notices in both directions.
-
-### 3. Hosting
-
-The app keeps its database and uploaded files on disk, so it needs a host with a **persistent disk** and a long-running Node process. Good options are Render, Railway, or Fly.io, with a disk mounted and `DATA_DIR` pointed at it. Serverless platforms such as Vercel will not keep uploads or the database between requests, so don't deploy this app there.
-
-Set these in your host's environment settings (see `.env.example`):
-
-| Variable | Purpose |
+| Command | What it does |
 | --- | --- |
-| `SITE_URL` | Public address of the site (used in emails and the payment callback) |
-| `AUTH_SECRET` | Long random string that signs login sessions |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | Producer account (created on first start) |
-| `DATA_DIR` | Folder on the persistent disk for the database and uploads |
-| `PAYSTACK_SECRET_KEY` | Turns on live payments |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Sends real email |
-| `MOMO_NUMBER`, `MOMO_NAME`, `BANK_*` | Shown to buyers in test mode and for manual transfers |
+| `npm start` | Starts the server on `0.0.0.0:$PORT`. |
+| `npm run dev` | Same, restarting on file changes. |
+| `npm run seed` | Creates the producer account from `ADMIN_EMAIL` (or promotes it) and adds demo beats. Safe to re-run. |
+| `npm run smoke` | End-to-end test against a running server (set `SMOKE_URL` for a remote one). Covers sign-up, buying, delivery, messages and admin access. |
 
-## How the files are protected
+## Payments
 
-- Full beats are stored in `data/private/` and are **never served directly**. They are only sent through a download link tied to a paid order (`/api/download/<token>`).
-- Previews and cover art live in `data/public/` and are played on the site. Keep previews short or lower quality. The producer chooses the preview file when uploading.
+- **Test mode** (default, when `PAYSTACK_SECRET_KEY` is empty): the buyer picks Mobile
+  Money or bank transfer and confirms. No money moves. Use this to try the whole flow.
+- **Live mode** (set `PAYSTACK_SECRET_KEY`): buyers are sent to Paystack Checkout, which
+  accepts Mobile Money and bank payments in GHS. Orders are confirmed by the callback
+  (`/payments/callback`), by the webhook (`POST /api/payments/webhook`, HMAC-SHA512
+  signed), or by the producer under **Orders → Mark paid** for manual bank transfers.
+  Add the webhook URL shown in **Settings** to your Paystack dashboard.
 
-## Project layout
+Each order is delivered exactly once, even if the buyer pays, refreshes, or the webhook
+arrives twice. Amounts are checked against Paystack before an order is marked paid.
+
+## Email
+
+- Set `SMTP_HOST` (and the other `SMTP_*` values) to send real email.
+- With no SMTP set, every email is still saved to the producer's **Mailbox**, so you can
+  check what would have been sent.
+- Beats up to `EMAIL_ATTACH_MAX_MB` are attached to the purchase email. Larger beats get
+  a download link (valid while the order exists).
+
+## Licences
+
+| Licence | Price field | Notes |
+| --- | --- | --- |
+| MP3 Lease | `price_mp3` | Non-exclusive, MP3 delivered. |
+| WAV Lease | `price_wav` | Non-exclusive, lossless WAV delivered. |
+| Exclusive | `price_exclusive` | The beat is taken off sale after the purchase. |
+
+Licence wording lives in `server/orders.js` (`LICENSES`).
+
+## Files and storage
+
+- `DATA_DIR` (default `./data`) holds `store.db` (SQLite), full beat files in
+  `private/audio` (never served publicly), and previews, covers and videos in `public/`.
+- Put `DATA_DIR` on a persistent disk in production, and back it up. Beat files are not
+  in Git.
+
+## Deploying
+
+This is a long-running Node server with a local SQLite database and local file storage,
+so host it on a server or VM (or a container with a persistent volume). It will not work
+as a stateless serverless function, because the database and uploaded files need to
+persist between requests.
+
+Set `SITE_URL` to the public address, `AUTH_SECRET` to a long random string, and the
+`ADMIN_*` values. Then run `npm run seed` once and `npm start`.
+
+## Layout
 
 ```
-server/
-  index.js          Express app and routing
-  config.js         environment settings
-  db.js             SQLite schema
-  auth.js           passwords (scrypt), signed session cookies
-  payments.js       Paystack start / verify / webhook signature
-  mailer.js         SMTP sending + the email outbox
-  uploads.js        upload handling (audio, preview, cover, video)
-  seed.js           producer account + demo beats (npm run seed)
-  lib/              order fulfilment, licences, synthesizer for demo audio, helpers
-  routes/           auth, catalogue, orders, account (downloads/messages), admin
-public/
-  index.html        single page app shell
-  css/styles.css    blue theme, animated hero
-  js/               router + pages (home, beats, videos, account, admin)
-scripts/smoke.js    end-to-end test
+server/   Express API, auth, payments, orders, email, uploads, seed
+public/   Single-page front end (vanilla JS modules), CSS, favicon
+scripts/  smoke.js end-to-end test
 ```
-
-## Known limits
-
-- **Single server.** SQLite and local file storage suit one instance. To run several instances, move the database to Postgres and the files to object storage.
-- **No password reset yet.** Artists can't reset a forgotten password. Add that before launch if you expect users to need it.
-- **Replies are on the site.** Artists reply from their dashboard. Emails are notifications, not reply-by-email.
-- **Licence terms** are sample text in `server/lib/licenses.js`. Replace them with your own legal wording.

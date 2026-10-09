@@ -2,15 +2,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const env = process.env;
-
-function str(name, fallback = '') {
-  const v = env[name];
+const str = (name, fallback = '') => {
+  const v = process.env[name];
   return typeof v === 'string' && v.trim() !== '' ? v.trim() : fallback;
-}
+};
 
 export const config = {
-  rootDir: path.resolve(here, '..'),
   publicDir: path.resolve(here, '..', 'public'),
   port: Number(str('PORT', '4000')),
   siteName: str('SITE_NAME', 'Beat Store'),

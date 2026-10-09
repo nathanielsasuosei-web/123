@@ -1,20 +1,21 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Buy beats and videos from a music producer. Pay with Mobile Money or bank transfer and get your files by email." />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Beats and videos from a working producer. Pay with Mobile Money or bank transfer and get your files by email." />
     <meta name="theme-color" content="#1d4ed8" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>Beat Store</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/css/styles.css" />
   </head>
   <body>
+    <a class="skip-link" href="#view">Skip to content</a>
     <header class="site-header" id="siteHeader"></header>
-    <main id="view" class="view"></main>
+    <main id="view" class="page"><div class="loader" aria-label="Loading"></div></main>
     <footer class="site-footer" id="siteFooter"></footer>
-    <div id="playerBar" class="player-bar hidden"></div>
-    <div id="toasts" class="toasts" aria-live="polite"></div>
+    <div class="player-bar hidden" id="playerBar" role="region" aria-label="Beat preview player"></div>
+    <div class="toasts" id="toasts" aria-live="polite"></div>
     <script type="module" src="/js/app.js"></script>
   </body>
 </html>

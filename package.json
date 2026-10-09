@@ -2,7 +2,7 @@
   "name": "producer-beat-store",
   "version": "1.0.0",
   "private": true,
-  "description": "A beat & video store for a music producer: artist accounts, Mobile Money and bank payments (Paystack), beat delivery and messages by email.",
+  "description": "Beat and video store for a music producer: artist accounts, Mobile Money and bank payments, delivery and messages by email.",
   "type": "module",
   "engines": {
     "node": ">=22.13.0"
