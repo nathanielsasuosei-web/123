@@ -1,67 +1,86 @@
-import './src/env.js'
-import express from 'express'
-import helmet from 'helmet'
-import cors from 'cors'
-import morgan from 'morgan'
-import fs from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import express from 'express';
+import path from 'node:path';
+import { config, paymentMode, emailMode } from './config.js';
+import { db } from './db.js';
+import { loadUser } from './auth.js';
+import { ensureAdmin } from './seed.js';
+import { authRouter } from './routes/auth.js';
+import { beatsRouter, videosRouter } from './routes/catalogue.js';
+import { ordersRouter, webhookRouter, callbackRouter } from './routes/orders.js';
+import { downloadRouter, messagesRouter } from './routes/account.js';
+import { adminRouter } from './routes/admin.js';
 
-import { uploadsDir } from './src/upload.js'
-import authRoutes from './src/routes/auth.js'
-import beatsRoutes from './src/routes/beats.js'
-import videosRoutes from './src/routes/videos.js'
-import ordersRoutes from './src/routes/orders.js'
-import messagesRoutes from './src/routes/messages.js'
-import adminRoutes from './src/routes/admin.js'
-import miscRoutes from './src/routes/misc.js'
+const app = express();
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const PORT = Number(process.env.PORT || 4000)
+/** Minimal cookie reader so we don't need an extra dependency. */
+app.use((req, _res, next) => {
+  req.cookies = {};
+  for (const part of (req.headers.cookie || '').split(';')) {
+    const i = part.indexOf('=');
+    if (i < 0) continue;
+    const key = part.slice(0, i).trim();
+    try {
+      req.cookies[key] = decodeURIComponent(part.slice(i + 1).trim());
+    } catch {
+      req.cookies[key] = part.slice(i + 1).trim();
+    }
+  }
+  next();
+});
 
-const app = express()
+// The Paystack webhook must see the raw body, so it is mounted before express.json().
+app.use('/api/payments', webhookRouter);
+app.use('/payments', callbackRouter);
 
-app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'cross-origin' } }))
-app.use(cors({ origin: true }))
-app.use(morgan('dev'))
-app.use(express.json({ limit: '2mb' }))
+app.use(express.json({ limit: '100kb' }));
+app.use(loadUser);
 
-// Uploaded media (beats, covers, videos, thumbnails)
-app.use('/uploads', express.static(uploadsDir, { maxAge: '7d', fallthrough: true }))
+app.get('/api/health', (req, res) => {
+  const ok = !!db.prepare('SELECT 1 AS ok').get();
+  res.json({
+    ok,
+    site: config.siteName,
+    payments: paymentMode(),
+    email: emailMode(),
+    currency: config.currency,
+  });
+});
 
-// API
-app.use('/api/auth', authRoutes)
-app.use('/api/beats', beatsRoutes)
-app.use('/api/videos', videosRoutes)
-app.use('/api/orders', ordersRoutes)
-app.use('/api/messages', messagesRoutes)
-app.use('/api/admin', adminRoutes)
-app.use('/api', miscRoutes)
+app.use('/api/auth', authRouter);
+app.use('/api/beats', beatsRouter);
+app.use('/api/videos', videosRouter);
+app.use('/api/orders', ordersRouter);
+app.use('/api/messages', messagesRouter);
+app.use('/api/download', downloadRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));
 
-// Serve the built client (production) if it exists
-app.get('/', (req, res) => {
-  res.json({ ok: true, name: 'MiraKilousE Beats API', docs: '/api/health' })
-})
+// Uploaded covers, previews and videos. Full beat files are never served from here.
+app.use('/media', express.static(path.join(config.dataDir, 'public'), { maxAge: '7d', index: false }));
+app.use('/media', (req, res) => res.status(404).end());
 
-const clientDist = path.join(__dirname, '..', 'client', 'dist')
-if (fs.existsSync(clientDist)) {
-  app.use(express.static(clientDist))
-  app.get(/^(?!\/api|\/uploads).*/, (req, res) => {
-    res.sendFile(path.join(clientDist, 'index.html'))
-  })
-}
+// The website (single-page app).
+app.use(express.static(config.publicDir, { index: 'index.html' }));
+app.get('*', (req, res) => res.sendFile(path.join(config.publicDir, 'index.html')));
 
-// JSON 404 for unknown API routes
-app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }))
+// Errors: upload limits, bad file types and anything unexpected.
+app.use((err, req, res, _next) => {
+  const isUserError = err.name === 'MulterError' || /not a supported|Unexpected upload/.test(err.message);
+  if (!isUserError) console.error('[server]', err);
+  const message = err.code === 'LIMIT_FILE_SIZE'
+    ? 'That file is too large (max 400 MB).'
+    : isUserError
+      ? err.message
+      : 'Something went wrong. Please try again.';
+  if (req.path.startsWith('/api')) return res.status(isUserError ? 400 : 500).json({ error: message });
+  res.status(500).send(message);
+});
 
-// Error handler
-app.use((err, req, res, next) => {
-  console.error('[error]', err)
-  if (res.headersSent) return next(err)
-  res.status(err.status || 500).json({ error: err.message || 'Something went wrong' })
-})
+ensureAdmin();
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n🎧 MiraKilousE Beats API running at http://0.0.0.0:${PORT}`)
-  console.log(`   Uploads served from ${uploadsDir}\n`)
-})
+app.listen(config.port, '0.0.0.0', () => {
+  console.log(`[store] ${config.siteName} running at http://localhost:${config.port}`);
+  console.log(`[store] payments: ${paymentMode()} · email: ${emailMode()} · data: ${config.dataDir}`);
+});
