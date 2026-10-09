@@ -27,7 +27,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <h1 className="text-3xl font-extrabold">Hi, {user.username}</h1>
         <p className="mt-1 text-muted">
           {paid.length ? `You own ${paid.length} beat${paid.length === 1 ? "" : "s"}. ` : ""}
-          Download links are also in your confirmation emails.
+          Download links are also in your confirmation emails.{" "}
+          <Link href="/dashboard/messages" className="font-semibold">
+            Messages with the producer →
+          </Link>
         </p>
 
         {orders.length ? (

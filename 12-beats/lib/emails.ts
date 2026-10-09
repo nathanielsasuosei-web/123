@@ -174,3 +174,30 @@ export async function sendWelcomeEmail(user: User): Promise<void> {
     ].join("\n"),
   });
 }
+
+/** Notifies the recipient of a new chat message. Replies happen on the site, not by email. */
+export async function sendNewMessageEmail(input: {
+  to: string;
+  recipientName: string;
+  senderName: string;
+  body: string;
+  path: string;
+}): Promise<void> {
+  const link = await absoluteUrl(input.path);
+  await sendMail({
+    to: input.to,
+    kind: "message",
+    subject: `💬 New message from ${input.senderName}`,
+    text: [
+      `Hi ${input.recipientName},`,
+      ``,
+      `${input.senderName} sent you a message on ${config.siteName}:`,
+      ``,
+      input.body,
+      ``,
+      `Reply here: ${link}`,
+      ``,
+      `(Please reply on the website — replies sent to this email are not read.)`,
+    ].join("\n"),
+  });
+}

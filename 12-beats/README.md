@@ -13,6 +13,10 @@ in this repository.
   server-side, the webhook signature is checked, and fulfilment happens **exactly once**.
 - **Email**: receipt (with the beat attached when it is small enough) plus a "new sale" notice for
   the producer. With no email provider configured, messages are captured in Admin → Outbox.
+- **Messages**: each artist has one conversation with the producer. Artists write from
+  `/dashboard/messages`; the producer answers from **Admin → Messages**, which lists every
+  conversation with unread counts. Every message is also emailed to the other side, with a link
+  back to the site (replies are made on the website, not by email).
 
 ## Run it locally
 

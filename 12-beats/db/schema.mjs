@@ -76,4 +76,16 @@ export const SCHEMA_STATEMENTS = [
      created_at timestamptz not null default now()
    )`,
   `create index if not exists outbox_created_idx on outbox (created_at desc)`,
+
+  // One conversation per artist: every message belongs to the artist's thread with the producer.
+  `create table if not exists messages (
+     id serial primary key,
+     artist_id integer not null references users (id) on delete cascade,
+     sender_id integer not null references users (id) on delete cascade,
+     sender_role text not null check (sender_role in ('artist', 'producer')),
+     body text not null,
+     read_at timestamptz,
+     created_at timestamptz not null default now()
+   )`,
+  `create index if not exists messages_artist_created_idx on messages (artist_id, created_at desc)`,
 ];
