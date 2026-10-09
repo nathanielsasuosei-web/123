@@ -20,6 +20,10 @@ const NOTICES: Record<string, Notice> = {
   },
   "payment-unavailable": { tone: "error", text: "Payment could not be started. Please try again in a moment." },
   "login-required": { tone: "info", text: "Log in to continue." },
+  "message-sent": { tone: "success", text: "Message sent. We have emailed the recipient." },
+  "message-empty": { tone: "error", text: "Write a message before sending." },
+  "message-too-long": { tone: "error", text: "Messages can be at most 2000 characters." },
+  "message-failed": { tone: "error", text: "Your message could not be sent. Please try again." },
   "already-purchased": { tone: "info", text: "You already own this beat — grab it again from your dashboard." },
 };
 

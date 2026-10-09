@@ -31,6 +31,12 @@ export async function SiteHeader() {
                 <Link href="/dashboard" className="text-body/85 hover:text-body hover:no-underline">
                   My purchases
                 </Link>
+                <Link
+                  href={user.role === "producer" ? "/admin/messages" : "/dashboard/messages"}
+                  className="text-body/85 hover:text-body hover:no-underline"
+                >
+                  Messages
+                </Link>
                 {user.role === "producer" ? (
                   <Link href="/admin" className="text-body/85 hover:text-body hover:no-underline">
                     Producer admin

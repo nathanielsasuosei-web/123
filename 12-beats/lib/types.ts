@@ -71,6 +71,46 @@ export type OutboxMessage = {
   createdAt: Date;
 };
 
+export type Message = {
+  id: number;
+  artistId: number;
+  senderId: number;
+  senderRole: "artist" | "producer";
+  senderName: string;
+  body: string;
+  readAt: Date | null;
+  createdAt: Date;
+};
+
+export type Conversation = {
+  artistId: number;
+  username: string;
+  email: string;
+  lastBody: string;
+  lastAt: Date | null;
+  unread: number;
+};
+
+export type MessageRow = {
+  id: number;
+  artist_id: number;
+  sender_id: number;
+  sender_role: "artist" | "producer";
+  sender_name: string;
+  body: string;
+  read_at: Date | null;
+  created_at: Date;
+};
+
+export type ConversationRow = {
+  artist_id: number;
+  username: string;
+  email: string;
+  last_body: string | null;
+  last_at: Date | null;
+  unread: number;
+};
+
 export type BeatInput = {
   title: string;
   description: string;

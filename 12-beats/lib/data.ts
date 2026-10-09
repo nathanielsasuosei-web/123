@@ -12,6 +12,10 @@ import type {
   Beat,
   BeatInput,
   BeatRow,
+  Conversation,
+  ConversationRow,
+  Message,
+  MessageRow,
   Order,
   OrderRow,
   OrderStatus,
@@ -529,4 +533,102 @@ export async function countOutbox(): Promise<number> {
   if (!(await hasDatabase())) return 0;
   const row = await queryOne<{ count: number }>("select count(*)::int as count from outbox");
   return Number(row?.count ?? 0);
+}
+
+/* --------------------------------------------------------------- messages */
+
+const MESSAGE_SELECT = `
+  select m.id, m.artist_id, m.sender_id, m.sender_role, m.body, m.read_at, m.created_at,
+         u.username as sender_name
+    from messages m
+    join users u on u.id = m.sender_id`;
+
+function toDate(value: Date | string): Date {
+  return value instanceof Date ? value : new Date(value);
+}
+
+function mapMessage(row: MessageRow): Message {
+  return {
+    id: row.id,
+    artistId: row.artist_id,
+    senderId: row.sender_id,
+    senderRole: row.sender_role,
+    senderName: row.sender_name,
+    body: row.body,
+    readAt: row.read_at ? toDate(row.read_at) : null,
+    createdAt: toDate(row.created_at),
+  };
+}
+
+function mapConversation(row: ConversationRow): Conversation {
+  return {
+    artistId: row.artist_id,
+    username: row.username,
+    email: row.email,
+    lastBody: row.last_body ?? "",
+    lastAt: row.last_at ? toDate(row.last_at) : null,
+    unread: Number(row.unread ?? 0),
+  };
+}
+
+/** Stores a message in an artist's thread. Throws `DatabaseUnavailableError` in demo mode. */
+export async function createMessage(input: {
+  artistId: number;
+  senderId: number;
+  senderRole: "artist" | "producer";
+  body: string;
+}): Promise<Message> {
+  await requireDatabase();
+  const inserted = await queryOne<{ id: number }>(
+    `insert into messages (artist_id, sender_id, sender_role, body) values ($1, $2, $3, $4) returning id`,
+    [input.artistId, input.senderId, input.senderRole, input.body],
+  );
+  const row = await queryOne<MessageRow>(`${MESSAGE_SELECT} where m.id = $1`, [inserted!.id]);
+  return mapMessage(row!);
+}
+
+/** The latest messages of one artist's thread, oldest first. */
+export async function listThread(artistId: number, limit = 200): Promise<Message[]> {
+  if (!(await hasDatabase())) return [];
+  const rows = await query<MessageRow>(
+    `select * from (${MESSAGE_SELECT} where m.artist_id = $1 order by m.created_at desc, m.id desc limit $2) recent
+     order by created_at asc, id asc`,
+    [artistId, limit],
+  );
+  return rows.map(mapMessage);
+}
+
+/** Marks the other side's messages in a thread as read by `reader`. */
+export async function markThreadRead(artistId: number, reader: "artist" | "producer"): Promise<void> {
+  if (!(await hasDatabase())) return;
+  const sender = reader === "artist" ? "producer" : "artist";
+  await query(
+    "update messages set read_at = now() where artist_id = $1 and sender_role = $2 and read_at is null",
+    [artistId, sender],
+  );
+}
+
+/** How many producer messages an artist has not read yet. */
+export async function countUnreadForArtist(artistId: number): Promise<number> {
+  if (!(await hasDatabase())) return 0;
+  const row = await queryOne<{ count: number }>(
+    "select count(*)::int as count from messages where artist_id = $1 and sender_role = 'producer' and read_at is null",
+    [artistId],
+  );
+  return Number(row?.count ?? 0);
+}
+
+/** Every artist with a conversation, most recent first. */
+export async function listConversations(): Promise<Conversation[]> {
+  if (!(await hasDatabase())) return [];
+  const rows = await query<ConversationRow>(
+    `select u.id as artist_id, u.username, u.email,
+            (select m.body from messages m where m.artist_id = u.id order by m.created_at desc, m.id desc limit 1) as last_body,
+            (select m.created_at from messages m where m.artist_id = u.id order by m.created_at desc, m.id desc limit 1) as last_at,
+            (select count(*)::int from messages m where m.artist_id = u.id and m.sender_role = 'artist' and m.read_at is null) as unread
+       from users u
+      where u.role = 'artist' and exists (select 1 from messages m where m.artist_id = u.id)
+      order by last_at desc`,
+  );
+  return rows.map(mapConversation);
 }
