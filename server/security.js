@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { q } from './db.js';
 
 const COOKIE = 'bs_session';
+const KEY_BYTES = 32;
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 let secret = config.authSecret;
@@ -13,15 +14,17 @@ if (!secret) {
 
 export function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
-  return `scrypt$${salt}$${crypto.scryptSync(password, salt, 64).toString('hex')}`;
+  return `scrypt$${salt}$${crypto.scryptSync(password, salt, KEY_BYTES).toString('hex')}`;
 }
 
 export function verifyPassword(password, stored) {
   const [scheme, salt, hash] = String(stored).split('$');
-  if (scheme !== 'scrypt' || !salt || !hash) return false;
-  const candidate = crypto.scryptSync(password, salt, 64);
+  if (scheme !== 'scrypt' || !salt || !/^[0-9a-f]+$/i.test(hash || '')) return false;
+  // Derive the same number of bytes that were stored, so hashes of any length verify.
   const expected = Buffer.from(hash, 'hex');
-  return expected.length === candidate.length && crypto.timingSafeEqual(candidate, expected);
+  if (!expected.length) return false;
+  const candidate = crypto.scryptSync(password, salt, expected.length);
+  return crypto.timingSafeEqual(candidate, expected);
 }
 
 const sign = (payload) => crypto.createHmac('sha256', secret).update(payload).digest('base64url');

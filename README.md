@@ -3,7 +3,12 @@
 A storefront for a music producer. Beats and videos are uploaded from a private
 producer dashboard. Artists create an account, buy a licence with **Mobile Money or
 bank transfer** (GHS), and receive the beat **by email**. Purchase confirmations and
-messages also go by email. Blue theme with an animated hero.
+messages also go by email.
+
+On top of that it ships an **animated hero**, a **dynamic glass navbar**, **smooth
+log-in / sign-up animation**, and an **adjustable colour system**: one accent colour
+drives the whole site, the producer can publish it for everyone, and any visitor can
+re-tint their own screen from the colour dock.
 
 ## Quick start
 
@@ -25,7 +30,8 @@ Log in with `ADMIN_EMAIL` / `ADMIN_PASSWORD` to reach the producer area at `#/ad
 | `npm start` | Starts the server on `0.0.0.0:$PORT`. |
 | `npm run dev` | Same, restarting on file changes. |
 | `npm run seed` | Creates the producer account from `ADMIN_EMAIL` (or promotes it) and adds demo beats. Safe to re-run. |
-| `npm run smoke` | End-to-end test against a running server (set `SMOKE_URL` for a remote one). Covers sign-up, buying, delivery, messages and admin access. |
+| `npm run smoke` | End-to-end API test against a running server (set `SMOKE_URL` for a remote one). Covers sign-up, buying, delivery, messages, admin access and the site-look API. |
+| `npm run check:ui` | Front-end harness: drives the real SPA modules in a DOM (set `BASE` for a remote server). Covers the hero, glass navbar, colour engine, auth animation and the full buy flow. Needs `npm install` (jsdom is a dev dependency). |
 
 ## Payments
 
@@ -47,6 +53,42 @@ arrives twice. Amounts are checked against Paystack before an order is marked pa
   check what would have been sent.
 - Beats up to `EMAIL_ATTACH_MAX_MB` are attached to the purchase email. Larger beats get
   a download link (valid while the order exists).
+
+## Site look
+
+**Adjustable colour.** One accent colour generates an 11-step ramp plus the light and
+dark surfaces, gradients, glass tints, hero colours, favicon and email branding.
+
+- **Visitors**: the colour dock (bottom-right) offers 8 presets, two colour pickers, a
+  glass level and dark mode. Their choice is stored on their device only.
+- **Producer**: `#/admin/settings` → **Site look** previews the same controls live and
+  **Save look** publishes them to every visitor (`PUT /api/admin/theme`, stored in the
+  `settings` table, served publicly at `GET /api/theme`). Saved looks also rebrand the
+  emails — headers and buttons use the accent.
+- **Defaults** come from `THEME_*` in `.env` until something is saved.
+
+Palette generation lives in `server/theme.js` (emails) and `public/js/theme.js`
+(screen); the two mirror each other so the admin preview is exactly what visitors get.
+`public/css/styles.css` only reads custom properties, so nothing is hard-coded to blue.
+
+**Dynamic glass navbar** (`public/js/navbar.js`): shrinks and thickens as you scroll,
+carries a reading-progress line, hides on a fast scroll down and returns on a scroll up,
+goes clear and light-on-dark while it sits over the hero, picks up a tint from the
+content behind it, follows the cursor with a spotlight, and slides a pill between nav
+links. On mobile the drawer is a glass sheet with staggered links and a morphing
+hamburger. Glass strength is a setting (solid → frosted).
+
+**Animated hero** (`public/js/home.js`): canvas waves, drifting dust and a glow painted
+from the live accent (change the colour and the hero re-tints without a reload), pointer
+parallax, a rotating headline, live catalogue stats and an equaliser strip. The producer
+can switch it to a still frame (`heroMotion`), and `prefers-reduced-motion` is honoured
+everywhere.
+
+**Log in / sign up** (`public/js/auth.js`): one card morphs between the two modes (FLIP
+height animation, sliding mode pill, staggered fields), floating labels, show/hide
+password, a strength meter, and a submit button that runs idle → spinner → success.
+Sign-up ends with confetti in the site colours; errors shake the card. A colour panel
+sits behind the form on wide screens.
 
 ## Licences
 
@@ -78,7 +120,9 @@ Set `SITE_URL` to the public address, `AUTH_SECRET` to a long random string, and
 ## Layout
 
 ```
-server/   Express API, auth, payments, orders, email, uploads, seed
+server/   Express API, auth, payments, orders, email, uploads, theme, seed
 public/   Single-page front end (vanilla JS modules), CSS, favicon
-scripts/  smoke.js end-to-end test
+          js/ theme.js colour engine + dock · navbar.js glass navbar · auth.js login/signup
+          js/ confetti.js celebration · home.js hero · core.js router/player/header
+scripts/  smoke.js API end-to-end test · frontend-check.mjs front-end harness
 ```

@@ -1,4 +1,5 @@
 import { api, esc, toast } from './api.js';
+import { initNavbar } from './navbar.js';
 
 /** Shared app state. Pages read and update this. */
 export const state = { me: null, siteName: 'Beat Store', currency: 'GHS', cleanups: [] };
@@ -75,14 +76,18 @@ export function renderHeader() {
        <button class="btn btn-ghost btn-sm" id="logoutBtn">Log out</button>`
     : `${link('/login', 'Log in')}<a href="#/register" class="btn btn-primary btn-sm">Sign up</a>`;
 
-  document.getElementById('siteHeader').innerHTML = `
+  const header = document.getElementById('siteHeader');
+  header.innerHTML = `
+    <div class="header-glass" aria-hidden="true"></div>
+    <div class="nav-progress" aria-hidden="true"></div>
     <div class="container header-inner">
       <a href="#/" class="brand">
         <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-        <span>${esc(state.siteName)}</span>
+        <span class="brand-text">${esc(state.siteName)}</span>
       </a>
-      <button class="menu-toggle" id="menuToggle" aria-label="Open menu">☰</button>
-      <nav class="nav" id="mainNav">
+      <button class="menu-toggle" id="menuToggle" aria-label="Open menu" aria-expanded="false" aria-controls="mainNav"><span></span><span></span><span></span></button>
+      <nav class="nav" id="mainNav" aria-label="Main">
+        <span class="nav-pill" aria-hidden="true"></span>
         ${link('/beats', 'Beats')}
         ${link('/videos', 'Videos')}
         ${right}
@@ -90,8 +95,9 @@ export function renderHeader() {
     </div>`;
 
   const nav = document.getElementById('mainNav');
-  document.getElementById('menuToggle').onclick = () => nav.classList.toggle('open');
-  nav.onclick = (e) => e.target.closest('a') && nav.classList.remove('open');
+  state.navTeardown?.();
+  state.navTeardown = initNavbar(header);
+
   const logout = document.getElementById('logoutBtn');
   if (logout) {
     logout.onclick = async () => {
@@ -107,8 +113,8 @@ export function renderHeader() {
 function renderFooter() {
   document.getElementById('siteFooter').innerHTML = `
     <div class="container footer-inner">
-      <div><strong>${esc(state.siteName)}</strong><br /><span class="muted">Beats &amp; videos · Pay in GHS by Mobile Money or bank transfer</span></div>
-      <div class="muted small">Files are emailed to you and kept in your dashboard.</div>
+      <div><strong>${esc(state.siteName)}</strong><br /><span>Beats &amp; videos · Pay in ${esc(state.currency)} by Mobile Money or bank transfer</span></div>
+      <div class="small">Files are emailed to you and kept in your dashboard.</div>
     </div>`;
 }
 
@@ -123,6 +129,8 @@ export async function render() {
       /* ignore */
     }
   }
+  state.navTeardown?.();
+  state.navTeardown = null;
   const raw = location.hash.replace(/^#/, '') || '/';
   const [path, query] = raw.split('?');
   const params = new URLSearchParams(query || '');
@@ -133,6 +141,7 @@ export async function render() {
   for (const [re, handler] of routes) {
     const match = path.match(re);
     if (!match) continue;
+    el.classList.remove('page-in');
     el.innerHTML = '<div class="loader" aria-label="Loading"></div>';
     window.scrollTo({ top: 0 });
     try {
@@ -140,9 +149,23 @@ export async function render() {
     } catch (err) {
       el.innerHTML = `<div class="container section"><div class="notice notice-error">${esc(err.message)}</div></div>`;
     }
+    // Page transition, then reveal the cards as they settle into place.
+    void el.offsetWidth;
+    el.classList.add('page-in');
+    revealChildren(el);
     return;
   }
   el.innerHTML = `<div class="container section center">
     <h1>Page not found</h1><p class="muted">That page does not exist.</p>
     <a class="btn btn-primary" href="#/">Back to the store</a></div>`;
+  el.classList.add('page-in');
+}
+
+/** Staggers the cards of a freshly rendered page in, once, without an observer. */
+export function revealChildren(scope) {
+  if (!scope || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const items = scope.querySelectorAll('.grid > *, .steps > *, .stats > *, .licenses > *, .order-list > *');
+  items.forEach((node, i) => {
+    node.style.animation = `cardIn .5s cubic-bezier(.2,.8,.2,1) ${Math.min(i * 0.045, 0.6).toFixed(3)}s both`;
+  });
 }

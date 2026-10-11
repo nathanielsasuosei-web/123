@@ -2,13 +2,14 @@ import express, { Router } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config, paymentMode, emailMode } from './config.js';
-import { q } from './db.js';
+import { q, settings } from './db.js';
 import { requireUser, requireAdmin, setSession, clearSession, hashPassword, verifyPassword } from './security.js';
 import { sendEmail, emailLayout } from './mail.js';
 import { LICENSES, fulfilOrder, getOrder } from './orders.js';
 import { startPayment, verifyPaystack, isValidWebhook } from './payments.js';
 import { escapeHtml, formatMoney, moneyToPesewas, randomToken, slugify, str, isEmail, wrap } from './util.js';
 import { uploadBeat, uploadVideo, storedPath, removeFiles, removeStored, mediaUrl } from './uploads.js';
+import { getTheme, setTheme, isHex } from './theme.js';
 
 // ── DTOs ────────────────────────────────────────────────────────────────────────
 const beatDto = (b, admin = false) => ({
@@ -373,8 +374,37 @@ adminRouter.get('/settings', (req, res) => {
     adminEmail: config.adminEmail,
     paymentDetails: paymentDetails(),
     webhookUrl: `${config.siteUrl}/api/payments/webhook`,
+    theme: getTheme(),
   });
 });
+
+/** The site look: saved for every visitor, and used to brand the outgoing emails. */
+adminRouter.put('/theme', wrap(async (req, res) => {
+  const body = req.body || {};
+  if (body.accent !== undefined && !isHex(body.accent)) {
+    return res.status(400).json({ error: 'Pick a valid accent colour.' });
+  }
+  if (body.accent2 !== undefined && body.accent2 !== '' && !isHex(body.accent2)) {
+    return res.status(400).json({ error: 'Pick a valid second colour.' });
+  }
+  const theme = setTheme({
+    preset: str(body.preset, 20),
+    accent: body.accent,
+    accent2: body.accent2 || undefined,
+    dark: Boolean(body.dark),
+    glass: body.glass,
+    heroMotion: body.heroMotion !== false && body.heroMotion !== 'false',
+  });
+  settings.set('theme', {
+    preset: theme.preset,
+    accent: theme.accent,
+    accent2: theme.accent2,
+    dark: theme.dark,
+    glass: theme.glass,
+    heroMotion: theme.heroMotion,
+  });
+  res.json({ theme: getTheme() });
+}));
 
 adminRouter.get('/beats', (req, res) => {
   res.json({ items: q.all('SELECT * FROM beats ORDER BY created_at DESC, id DESC').map((b) => beatDto(b, true)) });

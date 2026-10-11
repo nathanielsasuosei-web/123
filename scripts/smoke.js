@@ -336,6 +336,21 @@ async function main() {
 
   r = await admin.get('/api/admin/settings');
   check('settings show the webhook URL and no secrets', r.status === 200 && String(r.data.webhookUrl).endsWith('/api/payments/webhook') && !JSON.stringify(r.data).includes('PAYSTACK'));
+  check('settings expose the site look', r.status === 200 && Boolean(r.data.theme?.accent) && Array.isArray(r.data.theme?.presets));
+
+  console.log('\nSite look (adjustable colour)');
+  r = await anon.get('/api/theme');
+  check('theme is public', r.status === 200 && /^#[0-9a-f]{6}$/i.test(r.data.theme.accent));
+  check('theme ships a full palette', Boolean(r.data.theme.palette?.light?.['500']) && Boolean(r.data.theme.palette?.dark?.['950']));
+  const before = r.data.theme;
+  check('visitors cannot change the site look', (await anon.request('PUT', '/api/admin/theme', { body: { accent: '#123456' } })).status === 401);
+  check('an invalid colour is rejected', (await admin.request('PUT', '/api/admin/theme', { body: { accent: 'not-a-colour' } })).status === 400);
+  r = await admin.request('PUT', '/api/admin/theme', { body: { preset: 'violet', accent: '#7c3aed', accent2: '#f472b6', dark: false, glass: 3, heroMotion: true } });
+  check('producer can save a new look', r.status === 200 && r.data.theme.accent === '#7c3aed' && r.data.theme.glass === 3);
+  r = await anon.get('/api/theme');
+  check('the saved look is served to everyone', r.data.theme.accent === '#7c3aed' && r.data.theme.presetName === 'Neon Violet');
+  r = await admin.request('PUT', '/api/admin/theme', { body: { preset: before.preset, accent: before.accent, accent2: before.accent2, dark: before.dark, glass: before.glass, heroMotion: before.heroMotion } });
+  check('the look can be restored', r.status === 200 && r.data.theme.accent === before.accent);
 
   await artist.post('/api/auth/logout', {});
   r = await artist.get('/api/auth/me');

@@ -82,9 +82,36 @@ CREATE TABLE IF NOT EXISTS outbox (
   error TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id, created_at);
 `);
+
+/** Key/value store for things the producer can change at runtime (the site look). */
+export const settings = {
+  get(key, fallback = null) {
+    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+    if (!row) return fallback;
+    try {
+      return JSON.parse(row.value);
+    } catch {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    db
+      .prepare(
+        `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+      )
+      .run(key, JSON.stringify(value));
+    return value;
+  },
+};
 
 export const q = {
   all: (sql, ...params) => db.prepare(sql).all(...params),
