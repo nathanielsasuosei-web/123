@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { config, emailMode } from './config.js';
 import { q } from './db.js';
+import { emailColors } from './theme.js';
 import { escapeHtml } from './util.js';
 
 const transport =
@@ -15,20 +16,21 @@ const transport =
 
 /** Branded HTML wrapper for every email the store sends. */
 export function emailLayout({ title, bodyHtml, buttonText, buttonUrl }) {
+  const c = emailColors();
   const button =
     buttonText && buttonUrl
-      ? `<p style="margin:28px 0"><a href="${escapeHtml(buttonUrl)}" style="background:#1d4ed8;color:#fff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:600;display:inline-block">${escapeHtml(buttonText)}</a></p>`
+      ? `<p style="margin:28px 0"><a href="${escapeHtml(buttonUrl)}" style="background:${c.accent};color:${c.onAccent};text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:600;display:inline-block">${escapeHtml(buttonText)}</a></p>`
       : '';
-  return `<!doctype html><html><body style="margin:0;background:#eef4ff;font-family:Arial,Helvetica,sans-serif;color:#0f172a">
+  return `<!doctype html><html><body style="margin:0;background:${c.page};font-family:Arial,Helvetica,sans-serif;color:${c.ink}">
 <div style="max-width:560px;margin:0 auto;padding:24px">
-  <div style="background:linear-gradient(135deg,#1e3a8a,#2563eb);border-radius:16px 16px 0 0;padding:22px 28px;color:#fff">
+  <div style="background:linear-gradient(135deg,${c.accentDeep},${c.accent});border-radius:16px 16px 0 0;padding:22px 28px;color:#fff">
     <div style="font-size:13px;letter-spacing:.14em;text-transform:uppercase;opacity:.85">${escapeHtml(config.siteName)}</div>
     <div style="font-size:22px;font-weight:700;margin-top:6px">${escapeHtml(title)}</div>
   </div>
   <div style="background:#fff;border-radius:0 0 16px 16px;padding:26px 28px;line-height:1.55;font-size:15px">
     ${bodyHtml}
     ${button}
-    <p style="color:#64748b;font-size:12px;margin-top:28px">You receive this because you have an account at ${escapeHtml(config.siteName)}.</p>
+    <p style="color:${c.muted};font-size:12px;margin-top:28px">You receive this because you have an account at ${escapeHtml(config.siteName)}.</p>
   </div>
 </div></body></html>`;
 }

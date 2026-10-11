@@ -1,5 +1,8 @@
 import { api, esc, money, dateTime, toast } from './api.js';
 import { state, renderHeader } from './core.js';
+import { renderAuthPage } from './auth.js';
+import { celebrate } from './confetti.js';
+import { syncDock } from './theme.js';
 
 const loginRequired = (el, text) => {
   el.innerHTML = `
@@ -18,49 +21,19 @@ export async function renderAuth(el, mode, params) {
     return;
   }
   const next = params.get('next');
-  const isLogin = mode === 'login';
-  const nextQs = next ? `?next=${encodeURIComponent(next)}` : '';
-  el.innerHTML = `
-    <section class="container section narrow">
-      <div class="auth-card card">
-        <span class="eyebrow">${isLogin ? 'Welcome back' : 'Create your account'}</span>
-        <h1>${isLogin ? 'Log in' : 'Sign up'}</h1>
-        <p class="muted">${isLogin ? 'Log in to buy beats and see your downloads and messages.' : 'Your receipts and files are sent to this email address.'}</p>
-        <form id="authForm" class="form">
-          ${isLogin ? '' : '<label>Your name<input name="name" autocomplete="name" required maxlength="80" /></label>'}
-          <label>Email<input name="email" type="email" autocomplete="email" required /></label>
-          <label>Password<input name="password" type="password" required minlength="${isLogin ? 1 : 8}" autocomplete="${isLogin ? 'current-password' : 'new-password'}" /></label>
-          <button class="btn btn-primary btn-block" type="submit">${isLogin ? 'Log in' : 'Create account'}</button>
-          <div class="error" id="authError" role="alert"></div>
-        </form>
-        <p class="muted small center">
-          ${isLogin
-            ? `New here? <a href="#/register${nextQs}">Create an account</a>`
-            : `Already have an account? <a href="#/login${nextQs}">Log in</a>`}
-        </p>
-      </div>
-    </section>`;
-
-  el.querySelector('#authForm').onsubmit = async (e) => {
-    e.preventDefault();
-    const errorEl = el.querySelector('#authError');
-    const button = e.target.querySelector('button[type=submit]');
-    errorEl.textContent = '';
-    button.disabled = true;
-    try {
-      const { user } = await api(isLogin ? '/api/auth/login' : '/api/auth/register', {
-        method: 'POST',
-        body: Object.fromEntries(new FormData(e.target)),
-      });
-      state.me = user;
-      renderHeader();
-      toast(isLogin ? `Welcome back, ${user.name}!` : 'Account created. Welcome!');
-      location.hash = next ? `#${next}` : user.role === 'admin' ? '#/admin' : '#/dashboard';
-    } catch (err) {
-      errorEl.textContent = err.message;
-      button.disabled = false;
-    }
-  };
+  return renderAuthPage(el, mode, params, async (values) => {
+    const { user } = await api(mode === 'login' ? '/api/auth/login' : '/api/auth/register', {
+      method: 'POST',
+      body: values,
+    });
+    state.me = user;
+    renderHeader();
+    syncDock();
+    // Let the success state of the button play out before the page changes.
+    await new Promise((r) => setTimeout(r, mode === 'login' ? 420 : 900));
+    toast(mode === 'login' ? `Welcome back, ${user.name}!` : 'Account created. Your beat files will be emailed to you.');
+    location.hash = next ? `#${next}` : user.role === 'admin' ? '#/admin' : '#/dashboard';
+  });
 }
 
 // ── Checkout ─────────────────────────────────────────────────────────────────────
@@ -70,6 +43,7 @@ export async function renderCheckout(el, params, match) {
   const { order, paymentMode, paymentDetails } = await api(`/api/orders/${encodeURIComponent(reference)}`);
 
   const showPaid = () => {
+    celebrate({ y: window.innerHeight * 0.32, count: 140 });
     el.innerHTML = `
       <section class="container section narrow center">
         <div class="success-mark" aria-hidden="true">✓</div>
@@ -103,7 +77,8 @@ export async function renderCheckout(el, params, match) {
         </div>
       </section>`;
     el.querySelector('#checkBtn').onclick = async (e) => {
-      e.currentTarget.disabled = true;
+      const btn = e.currentTarget;
+      btn.disabled = true;
       const { order: updated } = await api(`/api/orders/${encodeURIComponent(reference)}/verify`, { method: 'POST' });
       if (updated.status === 'paid') {
         toast('Payment received. Your beat is on its way!');
@@ -111,7 +86,7 @@ export async function renderCheckout(el, params, match) {
         showPaid();
       } else {
         toast('We have not received the payment yet. It can take a minute.', 'error');
-        e.currentTarget.disabled = false;
+        btn.disabled = false;
       }
     };
     return;
@@ -165,7 +140,9 @@ export async function renderCheckout(el, params, match) {
   });
 
   el.querySelector('#payBtn').onclick = async (e) => {
-    e.currentTarget.disabled = true;
+    // currentTarget is gone after the await, so keep a reference to the button.
+    const btn = e.currentTarget;
+    btn.disabled = true;
     try {
       const { order: paid } = await api(`/api/orders/${encodeURIComponent(reference)}/test-pay`, { method: 'POST', body: { method } });
       Object.assign(order, paid);
@@ -173,7 +150,7 @@ export async function renderCheckout(el, params, match) {
       showPaid();
     } catch (err) {
       toast(err.message, 'error');
-      e.currentTarget.disabled = false;
+      btn.disabled = false;
     }
   };
 }
@@ -253,13 +230,15 @@ export async function renderDashboard(el, params) {
       log.scrollTop = log.scrollHeight;
     };
     draw(items);
+    const chatInput = body.querySelector('#chatForm textarea[name=body]');
     body.querySelector('#chatForm').onsubmit = async (e) => {
       e.preventDefault();
-      const text = e.target.body.value.trim();
+      const text = chatInput.value.trim();
       if (!text) return;
       try {
         const res = await api('/api/messages', { method: 'POST', body: { body: text } });
-        e.target.body.value = '';
+        chatInput.value = '';
+        chatInput.focus();
         draw(res.items);
       } catch (err) {
         toast(err.message, 'error');

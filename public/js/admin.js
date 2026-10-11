@@ -1,5 +1,6 @@
 import { api, upload, esc, money, dateTime, toast } from './api.js';
 import { state } from './core.js';
+import { PRESETS, GLASS_LEVELS, setLocal, setSiteLook, syncDock } from './theme.js';
 
 const NAV = [
   ['/admin', 'Overview'],
@@ -167,7 +168,7 @@ async function beatForm(body, id) {
   form.onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(form);
-    fd.set('published', form.published.checked ? 'true' : 'false');
+    fd.set('published', form.querySelector('input[name=published]').checked ? 'true' : 'false');
     for (const name of ['audio', 'preview', 'cover']) {
       const f = fd.get(name);
       if (!f || !f.name) fd.delete(name);
@@ -226,7 +227,7 @@ async function videos(body) {
   form.onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(form);
-    fd.set('published', form.published.checked ? 'true' : 'false');
+    fd.set('published', form.querySelector('input[name=published]').checked ? 'true' : 'false');
     for (const name of ['video', 'cover']) {
       const f = fd.get(name);
       if (!f || !f.name) fd.delete(name);
@@ -338,15 +339,23 @@ async function messages(body, userId) {
       </form>`;
     const log = view.querySelector('#chatLog');
     log.scrollTop = log.scrollHeight;
-    view.querySelector('#replyForm').onsubmit = async (e) => {
+    const replyForm = view.querySelector('#replyForm');
+    const replyInput = replyForm.querySelector('textarea[name=body]');
+    replyForm.onsubmit = async (e) => {
       e.preventDefault();
-      const text = e.target.body.value.trim();
+      const text = replyInput.value.trim();
       if (!text) return;
+      const send = e.currentTarget.querySelector('button[type=submit]');
+      send.disabled = true;
       try {
         const res = await api(`/api/admin/messages/${userId}`, { method: 'POST', body: { body: text } });
+        replyInput.value = '';
         draw(res.items);
+        toast('Reply sent. The artist has been emailed.');
       } catch (err) {
         toast(err.message, 'error');
+      } finally {
+        send.disabled = false;
       }
     };
   };
@@ -383,9 +392,47 @@ async function outbox(body) {
 // ── Settings ────────────────────────────────────────────────────────────────────
 async function settings(body) {
   const s = await api('/api/admin/settings');
+  const t = s.theme;
   const row = (label, value) => `<li><span>${esc(label)}</span><strong>${esc(value || 'Not set')}</strong></li>`;
   body.innerHTML = `
     <h1>Settings</h1>
+
+    <div class="admin-form card pad" id="lookForm">
+      <h3 class="h4">Site look</h3>
+      <p class="muted small">One accent colour drives the whole site — navbar, hero, buttons, admin and the emails your artists receive. Changes preview instantly; <strong>Save look</strong> publishes them to every visitor.</p>
+      <div class="look-grid">
+        <div>
+          <p class="td-label">Presets</p>
+          <div class="look-presets">
+            ${PRESETS.map((p) => `<button type="button" class="td-preset ${p.accent.toLowerCase() === t.accent.toLowerCase() ? 'on' : ''}" data-accent="${p.accent}" data-accent2="${p.accent2}" data-preset="${p.id}"><i style="background:linear-gradient(135deg,${p.accent},${p.accent2})"></i><span>${esc(p.name)}</span></button>`).join('')}
+          </div>
+          <div class="td-row mt">
+            <label class="td-field"><span>Accent</span><input type="color" name="accent" value="${esc(t.accent)}" /></label>
+            <label class="td-field"><span>Second colour</span><input type="color" name="accent2" value="${esc(t.accent2)}" /></label>
+          </div>
+        </div>
+        <div>
+          <p class="td-label">Glass navbar</p>
+          <div class="td-seg" data-seg="glass">
+            ${GLASS_LEVELS.map((g) => `<button type="button" data-glass="${g.value}" class="${Number(t.glass) === g.value ? 'on' : ''}">${g.name}</button>`).join('')}
+          </div>
+          <div class="td-checks mt">
+            <label class="td-check"><input type="checkbox" name="dark" ${t.dark ? 'checked' : ''} /><span>Start visitors in dark mode</span></label>
+            <label class="td-check"><input type="checkbox" name="heroMotion" ${t.heroMotion !== false ? 'checked' : ''} /><span>Animated hero</span></label>
+          </div>
+          <div class="look-preview" aria-hidden="true">
+            <span class="lp-bar"></span><span class="lp-bar"></span><span class="lp-bar"></span>
+            <em>Preview</em>
+          </div>
+          <div class="cta">
+            <button class="btn btn-primary" type="button" id="lookSave">Save look</button>
+            <button class="btn btn-outline" type="button" id="lookReset">Back to saved</button>
+          </div>
+          <div class="error" id="lookError" role="alert"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="grid-2">
       <div class="card pad">
         <h3 class="h4">Payments</h3>
@@ -411,8 +458,90 @@ async function settings(body) {
         <ul class="details">
           ${row('Notifications to', s.adminEmail)}
           ${row('Site URL', s.siteUrl)}
+          ${row('Email branding', `${t.presetName} · ${t.accent}`)}
         </ul>
       </div>
     </div>
-    <p class="muted small mt">Settings come from environment variables (see .env.example). Change them there and restart the server.</p>`;
+    <p class="muted small mt">Payments, email and account settings come from environment variables (see .env.example). Change them there and restart the server.</p>`;
+
+  // Live preview: the producer's tweaks apply to their own screen until saved.
+  const form = body.querySelector('#lookForm');
+  const accentInput = form.querySelector('input[name=accent]');
+  const accent2Input = form.querySelector('input[name=accent2]');
+  const darkInput = form.querySelector('input[name=dark]');
+  const motionInput = form.querySelector('input[name=heroMotion]');
+  const draft = { accent: t.accent, accent2: t.accent2, dark: t.dark, glass: t.glass, heroMotion: t.heroMotion !== false, preset: t.preset };
+  const preview = () => {
+    setLocal(draft);
+    syncDock();
+    form.querySelector('.look-preview').style.setProperty('--lp', draft.accent);
+  };
+  form.querySelectorAll('.td-preset').forEach((btn) => {
+    btn.onclick = () => {
+      draft.preset = btn.dataset.preset;
+      draft.accent = btn.dataset.accent;
+      draft.accent2 = btn.dataset.accent2;
+      accentInput.value = draft.accent;
+      accent2Input.value = draft.accent2;
+      form.querySelectorAll('.td-preset').forEach((b) => b.classList.toggle('on', b === btn));
+      preview();
+    };
+  });
+  accentInput.oninput = () => {
+    draft.accent = accentInput.value;
+    draft.preset = 'custom';
+    form.querySelectorAll('.td-preset').forEach((b) => b.classList.remove('on'));
+    preview();
+  };
+  accent2Input.oninput = () => {
+    draft.accent2 = accent2Input.value;
+    draft.preset = 'custom';
+    preview();
+  };
+  form.querySelector('[data-seg=glass]').onclick = (e) => {
+    const btn = e.target.closest('[data-glass]');
+    if (!btn) return;
+    draft.glass = Number(btn.dataset.glass);
+    form.querySelectorAll('[data-glass]').forEach((b) => b.classList.toggle('on', b === btn));
+    preview();
+  };
+  darkInput.onchange = () => {
+    draft.dark = darkInput.checked;
+    preview();
+  };
+  motionInput.onchange = () => {
+    draft.heroMotion = motionInput.checked;
+    preview();
+  };
+  form.querySelector('#lookReset').onclick = () => {
+    Object.assign(draft, { accent: t.accent, accent2: t.accent2, dark: t.dark, glass: t.glass, heroMotion: t.heroMotion !== false, preset: t.preset });
+    accentInput.value = t.accent;
+    accent2Input.value = t.accent2;
+    darkInput.checked = t.dark;
+    motionInput.checked = t.heroMotion !== false;
+    form.querySelectorAll('[data-glass]').forEach((b) => b.classList.toggle('on', Number(b.dataset.glass) === t.glass));
+    preview();
+  };
+  form.querySelector('#lookSave').onclick = async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    form.querySelector('#lookError').textContent = '';
+    try {
+      const { theme: saved } = await api('/api/admin/theme', { method: 'PUT', body: draft });
+      // The saved look is now the site default, so this device no longer needs an override.
+      setSiteLook(saved);
+      syncDock();
+      Object.assign(t, { accent: saved.accent, accent2: saved.accent2, dark: saved.dark, glass: saved.glass, heroMotion: saved.heroMotion !== false, preset: saved.preset, presetName: saved.presetName });
+      btn.textContent = 'Saved ✓';
+      toast(`Site look saved (${saved.presetName} ${saved.accent}). Visitors and emails now use these colours.`);
+      setTimeout(() => {
+        btn.textContent = 'Save look';
+        btn.disabled = false;
+      }, 1800);
+    } catch (err) {
+      form.querySelector('#lookError').textContent = err.message;
+      btn.disabled = false;
+    }
+  };
+  preview();
 }

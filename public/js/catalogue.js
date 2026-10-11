@@ -77,7 +77,7 @@ export async function renderBeats(el, params) {
   data.items.forEach((beat) => grid.appendChild(beatCard(beat)));
   el.querySelector('#beatFilters').onsubmit = (e) => {
     e.preventDefault();
-    const f = new FormData(e.target);
+    const f = new FormData(e.currentTarget);
     location.hash = `#/beats?${new URLSearchParams({ q: f.get('q') || '', genre: f.get('genre') || '', sort: f.get('sort') || 'new' })}`;
   };
 }
